@@ -6,6 +6,7 @@ import android.os.Build;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.animation.Animation;
@@ -21,6 +22,7 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
      * Scaling coefficient that is used for increasing spaces between two items in lollipop
      */
     private static final double SCALING_COEFFICIENT = 1.3;
+    private static final String TAG = CycleLayoutManager.class.getName();
 
     /**
      * Half of the margin from item side. Is used to calculate item scroll possibility.
@@ -82,7 +84,9 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
      */
     private double mAdditionalAngleOffset = CycleMenuWidget.UNDEFINED_ANGLE_VALUE;
 
-    public CycleLayoutManager(Context context, CORNER corner ) {
+    private RecyclerView recyclerView;
+
+    public CycleLayoutManager(Context context, CORNER corner) {
         mCurrentCorner = corner;
         mPreLollipopAdditionalButtonsMargin = context.getResources().getDimensionPixelSize(R.dimen.cm_prelollipop_additional_margin);
         mViewAngles = new SparseArray<>();
@@ -93,6 +97,18 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
         return new RecyclerView.LayoutParams(
                 RecyclerView.LayoutParams.MATCH_PARENT,
                 RecyclerView.LayoutParams.MATCH_PARENT);
+    }
+
+    @Override
+    public void onAttachedToWindow(RecyclerView view) {
+        super.onAttachedToWindow(view);
+        recyclerView = view;
+    }
+
+    @Override
+    public void onDetachedFromWindow(RecyclerView view, RecyclerView.Recycler recycler) {
+        super.onDetachedFromWindow(view, recycler);
+        recyclerView = null;
     }
 
     private int getRadius() {
@@ -197,6 +213,15 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
         return -delta;
     }
 
+    private int getFabWidth() {
+        return ((CycleMenuWidget) recyclerView.getParent()).getFloatingActionButton().getMeasuredWidth();
+    }
+
+    private int getFabHeight() {
+        return ((CycleMenuWidget) recyclerView.getParent()).getFloatingActionButton().getMeasuredHeight();
+    }
+
+
     /**
      * Method to check if the end is reached with scrolling
      *
@@ -250,7 +275,7 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
         mAnglePerItem = -1;
         detachAndScrapAttachedViews(recycler);
-        if (getWidth() > 0 && getHeight() > 0 && getWidth() < 10000 && getHeight() < 10000) {
+        if (getWidth() > 0 && getHeight() > 0) {
             fill(recycler);
         }
     }
@@ -286,6 +311,7 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
         int anchorPos;
         if (anchorView != null) {
             anchorPos = getPosition(anchorView);
+            Log.v(TAG, "Anchor pos: " + anchorPos);
         } else {
             return;
         }
@@ -303,6 +329,7 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
             canFillUp = anchorView.getRight() < getWidth();
         }
         angle = mViewAngles.get(anchorPos) + mAnglePerItem;
+        Log.v(TAG, "anchor pos: " + anchorPos + " angle :" + angle);
         //Can be used View.MeasureSpec.AT_MOST because items is floating action buttons
         final int widthSpec = View.MeasureSpec.makeMeasureSpec(getWidth(), View.MeasureSpec.AT_MOST);
         final int heightSpec = View.MeasureSpec.makeMeasureSpec(getHeight(), View.MeasureSpec.AT_MOST);
@@ -389,9 +416,12 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
         final int heightSpec = View.MeasureSpec.makeMeasureSpec(getHeight(), View.MeasureSpec.AT_MOST);
 
         double angle = 90;
+        boolean init = true;
         if (anchorView != null) {
+            init = false;
             angle = mViewAngles.get(pos);
         }
+        Log.v(TAG, "pos: " + pos + " angle: " + angle);
         int left;
         int top;
         int right;
@@ -433,7 +463,11 @@ class CycleLayoutManager extends RecyclerView.LayoutManager {
                     }
                     mAnglePerItem = anglePerLengthWithMargins;
                 }
+                if (init && pos == 0) {
+                    angle -= mAnglePerItem / 2;
+                }
                 mViewAngles.put(pos, angle);
+                Log.v(TAG, "fill down calculated angle " + pos + " " + angle);
                 int xDistance = (int) (getRadius() * Math.cos(angle * Math.PI / 180));
                 int yDistance = (int) (getRadius() * Math.sin(angle * Math.PI / 180));
 

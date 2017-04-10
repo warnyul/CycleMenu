@@ -2,30 +2,35 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <declare-styleable name="CycleMenuWidget" tools:ignore="ResourceName">
-        <attr name="cm_item_background_tint" format="reference|color"/>
+        <attr name="cm_item_background_tint" format="reference|color" />
         <attr name="cm_radius_scale_type" format="enum">
-            <enum name="auto" value="0"/>
-            <enum name="fixed" value="1"/>
+            <enum name="auto" value="0" />
+            <enum name="fixed" value="1" />
         </attr>
 
         <attr name="cm_scroll_type" format="enum">
-            <enum name="basic" value="0"/>
-            <enum name="endless" value="1"/>
+            <enum name="basic" value="0" />
+            <enum name="endless" value="1" />
         </attr>
 
-        <attr name="cm_fixedRadius" format="dimension"/>
-        <attr name="cm_autoMinRadius" format="dimension"/>
-        <attr name="cm_autoMaxRadius" format="dimension"/>
-        <attr name="cm_ripple_color" format="reference|color"/>
-
+        <attr name="cm_fixedRadius" format="dimension" />
+        <attr name="cm_autoMinRadius" format="dimension" />
+        <attr name="cm_autoMaxRadius" format="dimension" />
+        <attr name="cm_ripple_color" format="reference|color" />
+        <attr name="cm_circle_color" format="reference|color" />
         <attr name="cm_corner" format="enum">
-            <enum name="left_top" value="0"/>
-            <enum name="right_top" value="1"/>
-            <enum name="left_bottom" value="2"/>
-            <enum name="right_bottom" value="3"/>
+            <enum name="left_top" value="0" />
+            <enum name="right_top" value="1" />
+            <enum name="left_bottom" value="2" />
+            <enum name="right_bottom" value="3" />
         </attr>
 
-        <attr name="cm_corner_image_src" format="reference"/>
+        <attr name="cm_corner_image_src" format="reference" />
+        <attr name="cm_corner_image_opened_src" format="reference" />
+        <attr name="cm_fab_margin" format="dimension" />
+        <attr name="cm_fab_style" format="reference" />
+        <attr name="cm_fab_background" format="reference" />
+        <attr name="cm_fab_opened_background" format="reference" />
     </declare-styleable>
 
 </resources>

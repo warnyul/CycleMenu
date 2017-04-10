@@ -22,6 +22,7 @@ android {
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
-//    compile project(path: ':cycle_menu')
-    compile 'com.cleveroad:cycle-menu:1.0.1'
+    compile project(path: ':cycle_menu')
+    compile 'com.facebook.stetho:stetho:1.4.2'
+    compile 'com.facebook.stetho:stetho-okhttp3:1.4.2'
 }

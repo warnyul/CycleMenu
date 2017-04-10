@@ -1,12 +1,7 @@
 package com.cleveroad.cyclemenuwidget;
 
-import android.content.res.ColorStateList;
-import android.graphics.PorterDuff;
-import android.support.design.widget.FloatingActionButton;
 import android.support.v7.widget.RecyclerView;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,16 +10,14 @@ import java.util.List;
 /**
  * Inner adapter for menu mItems.
  */
-class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemHolder> implements OnMenuItemClickListener {
+public abstract class RecyclerMenuAdapter<T, A extends RecyclerMenuAdapter.ItemHolder> extends RecyclerView.Adapter<A> implements OnMenuItemClickListener {
 
-    private List<CycleMenuItem> mItems;
-    private ColorStateList mItemsBackgroundTint;
-    private boolean defaultTintColorChanged = false;
+    private List<T> mItems;
     private OnMenuItemClickListener mOnMenuItemClickListener;
 
     private CycleMenuWidget.SCROLL mScrollType = CycleMenuWidget.SCROLL.BASIC;
 
-    RecyclerMenuAdapter() {
+    public RecyclerMenuAdapter() {
         mItems = new ArrayList<>();
     }
 
@@ -33,7 +26,7 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
      *
      * @param scrollType the scroll type BASIC, ENDLESS
      */
-    void setScrollType(CycleMenuWidget.SCROLL scrollType) {
+    public void setScrollType(CycleMenuWidget.SCROLL scrollType) {
         mScrollType = scrollType;
     }
 
@@ -42,9 +35,9 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
      *
      * @param items collections to be set to adapter
      */
-    void setItems(Collection<CycleMenuItem> items) {
-        mItems.clear();
+    public void addAll(Collection<T> items) {
         mItems.addAll(items);
+        notifyDataSetChanged();
     }
 
     /**
@@ -52,28 +45,12 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
      *
      * @param onMenuItemClickListener listener
      */
-    void setOnMenuItemClickListener(OnMenuItemClickListener onMenuItemClickListener) {
+    public void setOnMenuItemClickListener(OnMenuItemClickListener onMenuItemClickListener) {
         mOnMenuItemClickListener = onMenuItemClickListener;
     }
 
-    /**
-     * Applies a tint to the background drawable of the items in cycle menu. Does not modify the current tint
-     * mode, which is {@link PorterDuff.Mode#SRC_IN} by default.
-     *
-     * @param itemsBackgroundTint the tint to apply, may be {@code null} to clear tint
-     */
-    void setItemsBackgroundTint(ColorStateList itemsBackgroundTint) {
-        defaultTintColorChanged = true;
-        mItemsBackgroundTint = itemsBackgroundTint;
-    }
-
-    /**
-     * Add items Collection to the adapter
-     *
-     * @param items collections that need to be added to adapter
-     */
-    void addItems(Collection<CycleMenuItem> items) {
-        mItems.addAll(items);
+    public OnMenuItemClickListener getOnMenuItemClickListener() {
+        return mOnMenuItemClickListener;
     }
 
     /**
@@ -81,25 +58,13 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
      *
      * @param item that need to add to the adapter
      */
-    void addItem(CycleMenuItem item) {
+    public void add(T item) {
         mItems.add(item);
+        notifyDataSetChanged();
     }
 
-    @Override
-    public ItemHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cm_item_fab, parent, false);
-        if (defaultTintColorChanged) {
-            //noinspection RedundantCast
-            ((FloatingActionButton) view).setBackgroundTintList(mItemsBackgroundTint);
-        }
-        return new ItemHolder(view, this);
-    }
-
-    @Override
-    public void onBindViewHolder(ItemHolder holder, final int position) {
-        FloatingActionButton button = (FloatingActionButton) holder.itemView;
-        button.setImageDrawable(mItems.get(getRealPosition(position)).getIcon());
-        holder.itemView.setId(mItems.get(getRealPosition(position)).getId());
+    public T getItem(int position) {
+        return mItems.get(position);
     }
 
     @Override
@@ -111,7 +76,12 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
         return mItems.size();
     }
 
-    int getRealItemsCount() {
+    public void clear() {
+        mItems.clear();
+        notifyDataSetChanged();
+    }
+
+    public int getRealItemsCount() {
         return mItems.size();
     }
 
@@ -139,11 +109,11 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
         }
     }
 
-    static class ItemHolder extends RecyclerView.ViewHolder implements View.OnClickListener, View.OnLongClickListener {
+    public static class ItemHolder extends RecyclerView.ViewHolder implements View.OnClickListener, View.OnLongClickListener {
 
         private OnMenuItemClickListener mOnMenuItemClickListener;
 
-        ItemHolder(View itemView, OnMenuItemClickListener listener) {
+        public ItemHolder(View itemView, OnMenuItemClickListener listener) {
             super(itemView);
             mOnMenuItemClickListener = listener;
             itemView.setOnClickListener(this);
@@ -153,12 +123,16 @@ class RecyclerMenuAdapter extends RecyclerView.Adapter<RecyclerMenuAdapter.ItemH
         @Override
         public void onClick(View view) {
             //Resend click to the outer menu item click listener with provided item position. if scrollType is ENDLESS need to getRealPosition from the position.
-            mOnMenuItemClickListener.onMenuItemClick(view, getAdapterPosition());
+            if (mOnMenuItemClickListener != null) {
+                mOnMenuItemClickListener.onMenuItemClick(view, getAdapterPosition());
+            }
         }
 
         @Override
         public boolean onLongClick(View view) {
-            mOnMenuItemClickListener.onMenuItemLongClick(view, getAdapterPosition());
+            if (mOnMenuItemClickListener != null) {
+                mOnMenuItemClickListener.onMenuItemLongClick(view, getAdapterPosition());
+            }
             return true;
         }
     }

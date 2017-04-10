@@ -45,32 +45,31 @@ public class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerViewAdapte
         if (viewType != 4) {
             view = LayoutInflater.from(mContext).inflate(R.layout.item_example, parent, false);
             CycleMenuWidget cycleMenuWidget = (CycleMenuWidget) view.findViewById(R.id.itemCycleMenuWidget);
+            cycleMenuWidget.setLayoutParams(new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             switch (viewType) {
                 case 0:
-                    cycleMenuWidget.setMenuRes(R.menu.cycle_menu_22);
                     cycleMenuWidget.setCorner(CycleMenuWidget.CORNER.LEFT_TOP);
                     break;
                 case 1:
-                    cycleMenuWidget.setMenuRes(R.menu.cycle_menu_3);
                     break;
                 case 2:
-                    cycleMenuWidget.setMenuRes(R.menu.cycle_menu_4);
                     cycleMenuWidget.setCorner(CycleMenuWidget.CORNER.LEFT_BOTTOM);
                     break;
                 default:
-                    cycleMenuWidget.setMenuRes(R.menu.cycle_menu_5);
                     cycleMenuWidget.setCorner(CycleMenuWidget.CORNER.RIGHT_BOTTOM);
                     break;
             }
+
+            cycleMenuWidget.setAdapter(new CircleAdapter(mContext));
         } else {
             view = LayoutInflater.from(mContext).inflate(R.layout.item_example_2, parent, false);
             RelativeLayout layout = (RelativeLayout) view;
             CycleMenuWidget cycleMenuWidget = new CycleMenuWidget(mContext);
             cycleMenuWidget.setLayoutParams(new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             cycleMenuWidget.setId(R.id.itemCycleMenuWidget);
-            cycleMenuWidget.setMenuRes(R.menu.cycle_menu_22);
             cycleMenuWidget.setCorner(CycleMenuWidget.CORNER.LEFT_BOTTOM);
             cycleMenuWidget.setRippleColor(Color.argb(100, 200, 100, 100));
+            cycleMenuWidget.setAdapter(new CircleAdapter(mContext));
             layout.addView(cycleMenuWidget);
         }
         return new ItemHolder(view, this, this);

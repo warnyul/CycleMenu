@@ -13,7 +13,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.PorterDuff;
 import android.graphics.RadialGradient;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -21,25 +20,17 @@ import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.support.annotation.DrawableRes;
-import android.support.annotation.MenuRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.view.menu.MenuBuilder;
 import android.support.v7.widget.RecyclerView;
 import android.util.AttributeSet;
-import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.OvershootInterpolator;
-import android.widget.ImageView;
-
-import java.util.Collection;
 
 public class CycleMenuWidget extends ViewGroup {
 
@@ -275,7 +266,7 @@ public class CycleMenuWidget extends ViewGroup {
     /**
      * Image for the image button placed in the corner.
      */
-    private ImageView mCenterImage;
+    private FloatingActionButton mCenterImage;
     /**
      * Recycler view which contains items of the menu
      */
@@ -286,16 +277,13 @@ public class CycleMenuWidget extends ViewGroup {
     private CycleLayoutManager mLayoutManager;
 
     /**
-     * Background tint for the items
-     */
-    private ColorStateList mItemsBackgroundTint;
-
-    /**
      * Radiuses to be used to calculate real radius of the items recyclerView
      */
     private int mAutoMinRadius = 0;
     private int mAutoMaxRadius = 0;
     private int mFixedRadius = 0;
+    private int fabMargin = 0;
+    private boolean disableOpening = false;
 
     /**
      * State of the layout manager and recyclerMenuAdapter
@@ -307,6 +295,8 @@ public class CycleMenuWidget extends ViewGroup {
      */
     private RecyclerMenuAdapter mAdapter;
 
+    private OnMenuItemClickListener mOnMenuItemClickListener;
+
     /**
      * When widget is used in the recyclerView item. It need to be requested to relayout itself.
      * runnableRequestLayout is used for that reason
@@ -317,6 +307,11 @@ public class CycleMenuWidget extends ViewGroup {
             mLayoutManager.requestLayout();
         }
     };
+
+    private Drawable cornerImageDrawable;
+    private Drawable cornerOpenedImageDrawable;
+    private int fabBg;
+    private int fabBgOpened;
 
     public CycleMenuWidget(Context context) {
         this(context, null);
@@ -338,23 +333,52 @@ public class CycleMenuWidget extends ViewGroup {
         init(context, attrs);
     }
 
+    private class DefaultOnMenuItemClickListener implements OnMenuItemClickListener {
+
+        private OnMenuItemClickListener onMenuItemClickListener;
+
+        public DefaultOnMenuItemClickListener(OnMenuItemClickListener onMenuItemClickListener) {
+            this.onMenuItemClickListener = onMenuItemClickListener;
+        }
+
+        @Override
+        public void onMenuItemClick(View view, int itemPosition) {
+            if (onMenuItemClickListener != null) {
+                onMenuItemClickListener.onMenuItemClick(view, itemPosition);
+            }
+            close(true);
+        }
+
+        @Override
+        public void onMenuItemLongClick(View view, int itemPosition) {
+            if (onMenuItemClickListener != null) {
+                onMenuItemClickListener.onMenuItemClick(view, itemPosition);
+            }
+        }
+    }
+
     private void init(Context context, AttributeSet attrs) {
         setWillNotDraw(false);
         TypedArray typedArrayValues = context.obtainStyledAttributes(attrs, R.styleable.CycleMenuWidget);
-        mItemsBackgroundTint = typedArrayValues.getColorStateList(R.styleable.CycleMenuWidget_cm_item_background_tint);
         mCorner = CORNER.valueOf(typedArrayValues.getInt(R.styleable.CycleMenuWidget_cm_corner, CORNER.RIGHT_TOP.getValue()));
         mAutoMinRadius = typedArrayValues.getDimensionPixelSize(R.styleable.CycleMenuWidget_cm_autoMinRadius, DEFAULT_UNDEFINED_VALUE);
         mAutoMaxRadius = typedArrayValues.getDimensionPixelSize(R.styleable.CycleMenuWidget_cm_autoMaxRadius, DEFAULT_UNDEFINED_VALUE);
         mFixedRadius = typedArrayValues.getDimensionPixelSize(R.styleable.CycleMenuWidget_cm_fixedRadius, mCircleMinRadius);
         mScalingType = RADIUS_SCALING_TYPE.valueOf(typedArrayValues.getInt(R.styleable.CycleMenuWidget_cm_radius_scale_type, RADIUS_SCALING_TYPE.AUTO.getValue()));
         mScrollType = SCROLL.valueOf(typedArrayValues.getInt(R.styleable.CycleMenuWidget_cm_scroll_type, SCROLL.BASIC.getValue()));
-        Drawable cornerImageDrawable = typedArrayValues.getDrawable(R.styleable.CycleMenuWidget_cm_corner_image_src);
+        cornerImageDrawable = typedArrayValues.getDrawable(R.styleable.CycleMenuWidget_cm_corner_image_src);
+        cornerOpenedImageDrawable = typedArrayValues.getDrawable(R.styleable.CycleMenuWidget_cm_corner_image_opened_src);
         mRippleColor = typedArrayValues.getColor(R.styleable.CycleMenuWidget_cm_ripple_color, DEFAULT_UNDEFINED_VALUE);
+        int circleColor = typedArrayValues.getColor(R.styleable.CycleMenuWidget_cm_circle_color, Color.WHITE);
+        fabMargin = typedArrayValues.getDimensionPixelSize(R.styleable.CycleMenuWidget_cm_fab_margin, 50);
+        int fabStyle = typedArrayValues.getResourceId(R.styleable.CycleMenuWidget_cm_fab_style, R.style.Widget_Design_FloatingActionButton);
+        fabBg = typedArrayValues.getColor(R.styleable.CycleMenuWidget_cm_fab_background, Color.RED);
+        fabBgOpened = typedArrayValues.getColor(R.styleable.CycleMenuWidget_cm_fab_opened_background, fabBg);
         typedArrayValues.recycle();
 
         mCirclePaint = new Paint();
         mCirclePaint.setAntiAlias(true);
-        mCirclePaint.setColor(Color.WHITE);
+        mCirclePaint.setColor(circleColor);
         mCirclePaint.setStyle(Paint.Style.FILL);
 
         if (mRippleColor == DEFAULT_UNDEFINED_VALUE) {
@@ -381,24 +405,54 @@ public class CycleMenuWidget extends ViewGroup {
         mRecyclerView = new TouchedRecyclerView(getContext());
         mRecyclerView.setOverScrollMode(RecyclerView.OVER_SCROLL_NEVER);
         mLayoutManager = new CycleLayoutManager(getContext(), mCorner);
-        addView(mRecyclerView);
+        addView(mRecyclerView, new RecyclerView.LayoutParams(RecyclerView.LayoutParams.MATCH_PARENT, RecyclerView.LayoutParams.MATCH_PARENT));
 
-        mAdapter = new RecyclerMenuAdapter();
-        if (mItemsBackgroundTint != null) {
-            mAdapter.setItemsBackgroundTint(mItemsBackgroundTint);
-        }
         mRecyclerView.setLayoutManager(mLayoutManager);
-        mRecyclerView.setAdapter(mAdapter);
-        mCenterImage = new ImageView(getContext());
+        mCenterImage = new FloatingActionButton(getContext(), null, fabStyle);
         if (cornerImageDrawable != null) {
             mCenterImage.setImageDrawable(cornerImageDrawable);
         } else {
             mCenterImage.setImageResource(R.drawable.cm_ic_plus);
         }
-        mCenterImage.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+
+        mCenterImage.setBackgroundTintList(ColorStateList.valueOf(fabBg));
+
         addView(mCenterImage);
 
+        ((MarginLayoutParams) mCenterImage.getLayoutParams()).setMargins(fabMargin, fabMargin, fabMargin, fabMargin);
+
         mCenterImage.setOnTouchListener(new CenterImageTouchListener());
+
+        setFocusableInTouchMode(true);
+        setFocusable(true);
+        setClickable(true);
+        setOnTouchListener(new OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                Log.v("CycleMenuWidget", String.format("state = %s action = %s", mState, event.getActionMasked()));
+                if (mState == STATE.OPEN) {
+                    switch (event.getActionMasked()) {
+                        case MotionEvent.ACTION_UP: {
+                            float centerX = mCenterImage.getX() + (mCenterImage.getMeasuredWidth() / 2);
+                            float centerY = mCenterImage.getY() + (mCenterImage.getMeasuredHeight() / 2);
+
+                            float distance = (float) Math.sqrt(Math.pow(centerX - event.getX(), 2) + Math.pow(centerY - event.getY(), 2));
+
+                            Log.v("CycleMenuWidget", String.format("center (%s,%s) event (%s,%s) distance %s circleRadius %s animCircleRadius %s", centerX, centerY, event.getX(), event.getY(), distance, mOutCircleRadius, mAnimationCircleRadius));
+
+                            if (distance > mOutCircleRadius) {
+                                close(true);
+                                return true;
+                            }
+
+                            break;
+                        }
+                    }
+                }
+
+                return false;
+            }
+        });
     }
 
     @Override
@@ -407,78 +461,51 @@ public class CycleMenuWidget extends ViewGroup {
         return super.onInterceptTouchEvent(ev);
     }
 
+    public void setAdapter(RecyclerMenuAdapter adapter) {
+        mAdapter = adapter;
+        mAdapter.setOnMenuItemClickListener(mOnMenuItemClickListener);
+        mRecyclerView.setAdapter(mAdapter);
+        requestLayout();
+    }
+
+    public int getFabMargin() {
+        return fabMargin;
+    }
+
+    public void setFabMargin(int fabMargin) {
+        this.fabMargin = fabMargin;
+    }
+
+    public Drawable getCornerOpenedImageDrawable() {
+        return cornerOpenedImageDrawable;
+    }
+
+    public void setCornerOpenedImageDrawable(Drawable cornerOpenedImageDrawable) {
+        this.cornerOpenedImageDrawable = cornerOpenedImageDrawable;
+    }
+
+    public boolean isDisableOpening() {
+        return disableOpening;
+    }
+
+    public void setDisableOpening(boolean disableOpening) {
+        this.disableOpening = disableOpening;
+    }
+
+    public RecyclerMenuAdapter getAdapter() {
+        return mAdapter;
+    }
+
     /**
      * Set menu item click listener
      *
      * @param onMenuItemClickListener listener
      */
     public void setOnMenuItemClickListener(@Nullable OnMenuItemClickListener onMenuItemClickListener) {
-        mAdapter.setOnMenuItemClickListener(onMenuItemClickListener);
-    }
-
-    /**
-     * Add the menu item.
-     *
-     * @param item menu item to add
-     */
-    public void addMenuItem(@NonNull CycleMenuItem item) {
-        checkNonNullParams(item, FIELD_NAME_FOR_EXCEPTION_ITEM);
-        mInitialized = false;
-        mAdapter.addItem(item);
-        mAdapter.notifyDataSetChanged();
-    }
-
-    /**
-     * Set the menu items from the menu res.
-     *
-     * @param menuResId menu resource from which need to get menuItems and add to the cycleMenu
-     */
-    public void setMenuRes(@MenuRes int menuResId) {
-        mInitialized = false;
-        Menu menu = new MenuBuilder(getContext());
-        MenuInflater inflater = new MenuInflater(getContext());
-        inflater.inflate(menuResId, menu);
-        setMenu(menu);
-    }
-
-    /**
-     * Set the menu items from the Menu object
-     *
-     * @param menu menu object from which need to get menuItems and add to the cycleMenu
-     */
-    public void setMenu(@NonNull Menu menu) {
-        checkNonNullParams(menu, FIELD_NAME_FOR_EXCEPTION_MENU);
-        mInitialized = false;
-        for (int i = 0; i < menu.size(); i++) {
-            MenuItem menuItem = menu.getItem(i);
-            CycleMenuItem cycleMenuItem = new CycleMenuItem(menuItem.getItemId(), menuItem.getIcon());
-            mAdapter.addItem(cycleMenuItem);
+        mOnMenuItemClickListener = new DefaultOnMenuItemClickListener(onMenuItemClickListener);
+        if (mAdapter != null) {
+            mAdapter.setOnMenuItemClickListener(onMenuItemClickListener);
         }
-        mAdapter.notifyDataSetChanged();
-    }
-
-    /**
-     * Add the menu items for the cycleMenu
-     *
-     * @param items Collection of the items to add
-     */
-    public void addMenuItems(@NonNull Collection<CycleMenuItem> items) {
-        checkNonNullParams(items, FIELD_NAME_FOR_EXCEPTION_ITEMS);
-        mInitialized = false;
-        mAdapter.addItems(items);
-        mAdapter.notifyDataSetChanged();
-    }
-
-    /**
-     * Set the menu items for the cycleMenu
-     *
-     * @param items Collection of the items to set
-     */
-    public void setMenuItems(@NonNull Collection<CycleMenuItem> items) {
-        checkNonNullParams(items, FIELD_NAME_FOR_EXCEPTION_ITEMS);
-        mInitialized = false;
-        mAdapter.setItems(items);
-        mAdapter.notifyDataSetChanged();
     }
 
     /**
@@ -502,6 +529,11 @@ public class CycleMenuWidget extends ViewGroup {
         checkNonNullParams(scalingType, FIELD_NAME_FOR_EXCEPTION_SCALING_TYPE);
         mInitialized = false;
         mScalingType = scalingType;
+    }
+
+    @Override
+    public void setOnClickListener(@Nullable OnClickListener l) {
+        mCenterImage.setOnClickListener(l);
     }
 
     /**
@@ -572,52 +604,17 @@ public class CycleMenuWidget extends ViewGroup {
         mFixedRadius = fixedRadius;
     }
 
-    /**
-     * Applies a tint to the background drawable of the items in cycle menu. Does not modify the current tint
-     * mode, which is {@link PorterDuff.Mode#SRC_IN} by default.
-     *
-     * @param itemsBackgroundTint the tint to apply, may be {@code null} to clear tint
-     */
-    public void setItemsBackgroundTint(@Nullable ColorStateList itemsBackgroundTint) {
-        mItemsBackgroundTint = itemsBackgroundTint;
-        mAdapter.setItemsBackgroundTint(itemsBackgroundTint);
-        mAdapter.notifyDataSetChanged();
-    }
-
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
-        int parentWidth = ((ViewGroup) getParent()).getWidth();
-        int parentHeight = ((ViewGroup) getParent()).getHeight();
 
-        int newWidthMeasureSpec = widthMeasureSpec;
-        int newHeightMeasureSpec = heightMeasureSpec;
-        if (height == 0) {
-            newHeightMeasureSpec = MeasureSpec.makeMeasureSpec(parentHeight, MeasureSpec.AT_MOST);
-            height = MeasureSpec.getSize(newHeightMeasureSpec);
-        }
+        measureChildWithMargins(mCenterImage, widthMeasureSpec, 0, heightMeasureSpec, 0);
 
-        if (width == 0) {
-            newWidthMeasureSpec = MeasureSpec.makeMeasureSpec(parentWidth, MeasureSpec.AT_MOST);
-            width = MeasureSpec.getSize(newWidthMeasureSpec);
-        }
-
-        if (mItemSize <= 0) {
-            FloatingActionButton buttonItem = (FloatingActionButton) LayoutInflater.from(getContext()).inflate(R.layout.cm_item_fab, this, false);
-            int buttonSpec = MeasureSpec.makeMeasureSpec(1000, MeasureSpec.AT_MOST);
-            measureChild(buttonItem, buttonSpec, buttonSpec);
-            int measuredItemWidth = buttonItem.getMeasuredWidth();
-            int measuredItemHeight = buttonItem.getMeasuredHeight();
-            mItemSize = measuredItemWidth > measuredItemHeight ? measuredItemWidth : measuredItemHeight;
-            if (mItemSize > 0) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    mItemSize = (int) (mItemSize * 1.3);
-                } else {
-                    mItemSize = (int) (mItemSize - mPreLollipopAdditionalButtonsMargin * 2 / 1.5f);
-                }
-            }
-        }
+        int measuredItemWidth = mCenterImage.getMeasuredWidth();
+        int measuredItemHeight = mCenterImage.getMeasuredHeight();
+        mItemSize = measuredItemWidth > measuredItemHeight ? measuredItemWidth : measuredItemHeight;
 
         mRecyclerSize = (int) ((width > height ? height : width) - mShadowSize);
         @SuppressWarnings("Range") int recyclerSizeMeasureSpec = MeasureSpec.makeMeasureSpec(mRecyclerSize, MeasureSpec.EXACTLY);
@@ -632,7 +629,10 @@ public class CycleMenuWidget extends ViewGroup {
             mAutoMinRadius = mAutoMaxRadius;
         }
         if (mScalingType == RADIUS_SCALING_TYPE.AUTO) {
-            mRecyclerSize = (int) (mItemSize * mAdapter.getRealItemsCount() * 4 / (Math.PI * 2));
+
+            double x = (mAdapter == null ? 0 : mAdapter.getItemCount()) * 4 / (Math.PI * 2);
+
+            mRecyclerSize = (int) (mItemSize * x);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mRecyclerSize += mItemSize * 5 / 8;
             } else {
@@ -655,16 +655,10 @@ public class CycleMenuWidget extends ViewGroup {
             mRecyclerSize = mFixedRadius;
         }
 
-        mOutCircleRadius = mRecyclerSize;
-        mRecyclerView.measure(recyclerSizeMeasureSpec, recyclerSizeMeasureSpec);
+        mOutCircleRadius = mRecyclerSize - (int) mShadowSize;
 
-        int lCenterIconSize = (int) Math.sqrt(mCircleMinRadius * mCircleMinRadius / 2.0);
-        int centerImageMeasureWidthSpec = MeasureSpec.makeMeasureSpec(lCenterIconSize, MeasureSpec.EXACTLY);
-        int centerImageMeasureHeightSpec = MeasureSpec.makeMeasureSpec(lCenterIconSize, MeasureSpec.EXACTLY);
-        mCenterImage.measure(centerImageMeasureWidthSpec, centerImageMeasureHeightSpec);
+        measureChild(mRecyclerView, recyclerSizeMeasureSpec, recyclerSizeMeasureSpec);
 
-        width = resolveSize(width, newWidthMeasureSpec);
-        height = resolveSize(height, newHeightMeasureSpec);
         setMeasuredDimension(width, height);
     }
 
@@ -703,18 +697,20 @@ public class CycleMenuWidget extends ViewGroup {
             recyclerRight = r;
         }
 
-        mCenterImage.layout(centerImageLeft, centerImageTop, centerImageRight, centerImageBottom);
+        mCenterImage.layout(centerImageLeft - fabMargin, centerImageTop - fabMargin, centerImageRight - fabMargin, centerImageBottom - fabMargin);
         mRecyclerView.layout(recyclerLeft, recyclerTop, recyclerRight, recyclerBottom);
         mRecyclerView.setTranslationX(getWidth());
         int countOfVisibleElements = (int) ((mRecyclerSize * Math.PI / 2) / mItemSize);
         if (!mInitialized && r > 0 && b > 0) {
-            if (mAdapter.getRealItemsCount() > countOfVisibleElements && mScrollType == SCROLL.ENDLESS) {
-                mAdapter.setScrollType(SCROLL.ENDLESS);
-                if (mCurrentPosition == RecyclerView.NO_POSITION) {
-                    mCurrentPosition = Integer.MAX_VALUE / 2 + (mAdapter.getRealItemsCount() - Integer.MAX_VALUE / 2 % mAdapter.getRealItemsCount());
+            if (mAdapter != null) {
+                if (mAdapter.getRealItemsCount() > countOfVisibleElements && mScrollType == SCROLL.ENDLESS) {
+                    mAdapter.setScrollType(SCROLL.ENDLESS);
+                    if (mCurrentPosition == RecyclerView.NO_POSITION) {
+                        mCurrentPosition = Integer.MAX_VALUE / 2 + (mAdapter.getRealItemsCount() - Integer.MAX_VALUE / 2 % mAdapter.getRealItemsCount());
+                    }
+                } else {
+                    mAdapter.setScrollType(SCROLL.BASIC);
                 }
-            } else {
-                mAdapter.setScrollType(SCROLL.BASIC);
             }
             if (mCurrentPosition != RecyclerView.NO_POSITION) {
                 mLayoutManager.scrollToPosition(mCurrentPosition);
@@ -728,9 +724,17 @@ public class CycleMenuWidget extends ViewGroup {
         }
     }
 
+    public STATE getState() {
+        return mState;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+
+        if (mState == STATE.CLOSED) {
+            return;
+        }
 
         int mainCircleRadius = mAnimationCircleRadius;
         buildShadowCorners();
@@ -757,8 +761,8 @@ public class CycleMenuWidget extends ViewGroup {
             canvas.drawPath(mCornerShadowPath, mCornerShadowPaint);
             canvas.restoreToCount(canvasState);
         } else if (mCorner == CORNER.RIGHT_BOTTOM) {
-            circleCenterX = getWidth();
-            circleCenterY = getHeight();
+            circleCenterX = getWidth() - (mCenterImage.getMeasuredWidth() / 2);
+            circleCenterY = getHeight() - (mCenterImage.getMeasuredHeight() / 2);
             int canvasState = canvas.save();
             canvas.rotate(90, getWidth(), 0);
             canvas.translate(getHeight(), 0);
@@ -888,7 +892,9 @@ public class CycleMenuWidget extends ViewGroup {
         super.onAttachedToWindow();
         mInitialized = false;
         mLayoutManager.requestLayout();
-        mAdapter.notifyDataSetChanged();
+        if (mAdapter != null) {
+            mAdapter.notifyDataSetChanged();
+        }
     }
 
     @Override
@@ -908,6 +914,21 @@ public class CycleMenuWidget extends ViewGroup {
             scrollEnabled(true);
         }
         super.onDetachedFromWindow();
+    }
+
+    @Override
+    protected LayoutParams generateDefaultLayoutParams() {
+        return new MarginLayoutParams(super.generateDefaultLayoutParams());
+    }
+
+    @Override
+    protected LayoutParams generateLayoutParams(LayoutParams p) {
+        return new MarginLayoutParams(super.generateLayoutParams(p));
+    }
+
+    @Override
+    public LayoutParams generateLayoutParams(AttributeSet attrs) {
+        return new MarginLayoutParams(super.generateLayoutParams(attrs));
     }
 
     private void sendState() {
@@ -946,16 +967,24 @@ public class CycleMenuWidget extends ViewGroup {
      * @param animated - indicate if need to open cycle menu with animation (true), immediately otherwise
      */
     public void open(final boolean animated) {
+        if (disableOpening)
+            return;
+
         int centerCrossImageRotateAngle = -45;
         if (animated) {
             scrollEnabled(false);
             mState = STATE.IN_OPEN_PROCESS;
             sendState();
-            mCenterImage.animate()
-                    .rotation(centerCrossImageRotateAngle)
-                    .setInterpolator(new OvershootInterpolator(2))
-                    .setDuration(CENTER_IMAGE_ROTATE_DURATION)
-                    .start();
+
+            if (cornerOpenedImageDrawable == null) {
+                mCenterImage.animate()
+                        .rotation(centerCrossImageRotateAngle)
+                        .setInterpolator(new OvershootInterpolator(2))
+                        .setDuration(CENTER_IMAGE_ROTATE_DURATION)
+                        .start();
+            } else {
+                mCenterImage.setImageDrawable(cornerOpenedImageDrawable);
+            }
 
             ObjectAnimator circleRadiusAnimator = ObjectAnimator.ofInt(this, CIRCLE_RADIUS_ANIMATOR_FIELD_NAME, mCircleMinRadius, mOutCircleRadius);
             circleRadiusAnimator.addListener(new AnimatorListenerAdapter() {
@@ -983,7 +1012,11 @@ public class CycleMenuWidget extends ViewGroup {
             animatorSet.start();
         } else {
             mVariableShadowSize = mShadowSize;
-            mCenterImage.setRotation(centerCrossImageRotateAngle);
+            if (cornerOpenedImageDrawable == null) {
+                mCenterImage.setRotation(centerCrossImageRotateAngle);
+            } else {
+                mCenterImage.setImageDrawable(cornerOpenedImageDrawable);
+            }
             mAnimationCircleRadius = mOutCircleRadius;
             mRecyclerView.setTranslationX(0);
             scrollEnabled(true);
@@ -991,6 +1024,8 @@ public class CycleMenuWidget extends ViewGroup {
             sendState();
             invalidate();
         }
+
+        mCenterImage.setBackgroundTintList(ColorStateList.valueOf(fabBgOpened));
     }
 
     /**
@@ -999,15 +1034,22 @@ public class CycleMenuWidget extends ViewGroup {
      * @param animated - indicate if need to close cycle menu with animation (true), immediately otherwise
      */
     public void close(boolean animated) {
+        if (disableOpening) {
+            return;
+        }
         if (animated) {
             scrollEnabled(false);
             mState = STATE.IN_CLOSE_PROCESS;
             sendState();
-            mCenterImage.animate()
-                    .rotation(0)
-                    .setInterpolator(new OvershootInterpolator(2))
-                    .setDuration(CENTER_IMAGE_ROTATE_DURATION)
-                    .start();
+            if (cornerOpenedImageDrawable == null) {
+                mCenterImage.animate()
+                        .rotation(0)
+                        .setInterpolator(new OvershootInterpolator(2))
+                        .setDuration(CENTER_IMAGE_ROTATE_DURATION)
+                        .start();
+            } else {
+                mCenterImage.setImageDrawable(cornerImageDrawable);
+            }
             mLayoutManager.rollOutItemsWithAnimation(new CycleLayoutManager.OnCompleteCallback() {
                 @Override
                 public void onComplete() {
@@ -1019,10 +1061,16 @@ public class CycleMenuWidget extends ViewGroup {
             mState = STATE.CLOSED;
             sendState();
             mVariableShadowSize = mShadowSize * SHADOW_SIZE_MIN_COEFFICIENT;
-            mCenterImage.setRotation(0);
+            if (cornerOpenedImageDrawable == null) {
+                mCenterImage.setRotation(0);
+            } else {
+                mCenterImage.setImageDrawable(cornerImageDrawable);
+            }
             mAnimationCircleRadius = mCircleMinRadius;
             invalidate();
         }
+
+        mCenterImage.setBackgroundTintList(ColorStateList.valueOf(fabBg));
     }
 
     private void innerAnimatedClose() {
@@ -1094,6 +1142,9 @@ public class CycleMenuWidget extends ViewGroup {
 
         @Override
         public boolean onTouch(View v, MotionEvent event) {
+            if (disableOpening)
+                return false;
+
             mShouldOpen = false;
             if (mState == STATE.IN_OPEN_PROCESS || mState == STATE.IN_CLOSE_PROCESS) {
                 return false;
@@ -1122,11 +1173,12 @@ public class CycleMenuWidget extends ViewGroup {
                             mRippleRadius = mOutCircleRadius;
                             changeMenuState();
                         } else {
-                            startRippleSizeAnimator(mRippleRadius, mOutCircleRadius);
                             if (mState == STATE.CLOSED) {
+                                startRippleSizeAnimator(mRippleRadius, mOutCircleRadius);
                                 mShouldOpen = true;
                             } else {
-                                changeMenuState();
+                                mCenterImage.performClick();
+                                return true;
                             }
                         }
                     }
@@ -1142,5 +1194,9 @@ public class CycleMenuWidget extends ViewGroup {
         if (param == null) {
             throw new IllegalArgumentException("Parameter \"" + paramName + "\" can't be null.");
         }
+    }
+
+    public FloatingActionButton getFloatingActionButton() {
+        return mCenterImage;
     }
 }
